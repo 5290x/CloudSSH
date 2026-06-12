@@ -70,7 +70,8 @@ export class SSHSessionDO {
       const socket = connect({ hostname: config.host, port: config.port });
       
       // 等待连接建立
-      await socket.opened;
+      const opened = await socket.opened;
+      console.log('TCP connected to', config.host, config.port);
 
       const session = new SSHSession(ws, socket, config);
       this.sessions.set(ws, session);
@@ -92,7 +93,10 @@ export class SSHSessionDO {
       await session.startHandshake();
 
     } catch (error) {
+      console.error('SSH session error:', error);
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      const errStack = error instanceof Error ? error.stack : '';
+      console.error('Error stack:', errStack);
       ws.send(JSON.stringify({ type: 'error', message: `连接失败: ${errMsg}` }));
       ws.close(1011, 'SSH connection failed');
     }
