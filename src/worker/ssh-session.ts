@@ -220,6 +220,8 @@ export class SSHSession {
         await this.writeSocket(packet);
         console.log('[KEX] NEWKEYS sent');
 
+        this.seqNumSend = 0;
+        this.packetParser.resetSeqNum();
         await this.enableEncryption();
         console.log('[KEX] Encryption enabled');
 

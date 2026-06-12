@@ -79,6 +79,10 @@ export class SSHPacketParser {
     return this.seqNum;
   }
 
+  resetSeqNum(): void {
+    this.seqNum = 0;
+  }
+
   getBufferLength(): number {
     return this.buffer.length;
   }
