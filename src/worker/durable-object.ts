@@ -65,7 +65,12 @@ export class SSHSessionDO {
     config: SSHConnectionConfig
   ): Promise<void> {
     try {
-      const socket = await (globalThis as any).connect(config.host, config.port);
+      // Cloudflare Workers TCP 连接
+      const { connect } = await import('cloudflare:sockets');
+      const socket = connect({ hostname: config.host, port: config.port });
+      
+      // 等待连接建立
+      await socket.opened;
 
       const session = new SSHSession(ws, socket, config);
       this.sessions.set(ws, session);

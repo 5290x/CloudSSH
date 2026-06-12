@@ -59,7 +59,13 @@ export class SSHSession {
 
   async startHandshake(): Promise<void> {
     this.state = 'version';
-    this.transport.sendVersion(this.socket);
+    
+    // 获取 writer 并发送版本字符串
+    const writer = this.socket.writable.getWriter();
+    const versionStr = 'SSH-2.0-CloudSSH_1.0\r\n';
+    await writer.write(new TextEncoder().encode(versionStr));
+    writer.releaseLock();
+    
     this.startReading();
   }
 
@@ -96,7 +102,7 @@ export class SSHSession {
     const packet = SSHPacketBuilder.build(
       this.kexInitLocal, 8, null, this.seqNumSend++
     );
-    this.socket.write(packet);
+    await this.writeSocket(packet);
 
     this.ecdhKeyPair = await ECDHKeyExchange.generateKeyPair();
     this.ecdhPublicKeySSH = await ECDHKeyExchange.exportPublicKeyForSSH(
@@ -107,7 +113,13 @@ export class SSHSession {
     const ecdhPacket = SSHPacketBuilder.build(
       ecdhInit, 8, null, this.seqNumSend++
     );
-    this.socket.write(ecdhPacket);
+    await this.writeSocket(ecdhPacket);
+  }
+
+  private async writeSocket(data: Uint8Array): Promise<void> {
+    const writer = this.socket.writable.getWriter();
+    await writer.write(data);
+    writer.releaseLock();
   }
 
   private async processPackets(): Promise<void> {
@@ -164,7 +176,7 @@ export class SSHSession {
           (data, seq) => this.encryptCipher!.encrypt(data, seq) as any,
           this.seqNumSend++
         );
-        this.socket.write(packet);
+        await this.writeSocket(packet);
 
         this.state = 'auth';
         await this.authenticate();
@@ -226,7 +238,7 @@ export class SSHSession {
       (data, seq) => this.encryptCipher!.encrypt(data, seq) as any,
       this.seqNumSend++
     );
-    this.socket.write(packet);
+    await this.writeSocket(packet);
   }
 
   private async handleAuthPacket(msgType: number, payload: Uint8Array): Promise<void> {
@@ -345,7 +357,7 @@ export class SSHSession {
       (data, seq) => this.encryptCipher!.encrypt(data, seq) as any,
       this.seqNumSend++
     );
-    this.socket.write(encrypted);
+    await this.writeSocket(encrypted);
   }
 
   close(): void {
