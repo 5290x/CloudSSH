@@ -142,10 +142,13 @@ To prevent malicious bot abuse, it is recommended to enable Cloudflare Turnstile
 1. **Create Turnstile Widget**: Log in to [Cloudflare Dashboard](https://dash.cloudflare.com/), go to the Turnstile page and create a new Widget.
 2. **Get Keys**: After creation, you will receive a **Site Key** (public) and a **Secret Key** (private).
 3. **Configure Environment Variables**:
-   - **Method 1 (GitHub)**: In the Cloudflare Dashboard Workers settings, add environment variable `TURNSTILE_SECRET` with your Secret Key.
-   - **Method 2 (CLI)**: Uncomment `TURNSTILE_SECRET` in `wrangler.toml` and enter your Secret Key.
-4. **Update Frontend Code**: In `frontend/src/auth-form.ts`, replace `sitekey` with your Site Key.
-5. **Redeploy**: Run the deployment command to apply the configuration.
+   - **Method 1 (GitHub)**: In the Cloudflare Dashboard Workers settings, add the following environment variables:
+     - `TURNSTILE_SECRET` = your Secret Key
+     - `TURNSTILE_SITEKEY` = your Site Key
+   - **Method 2 (CLI)**: Uncomment `TURNSTILE_SECRET` and `TURNSTILE_SITEKEY` in `wrangler.toml` and enter your keys.
+4. **Redeploy**: Run the deployment command to apply the configuration.
+
+> **Note**: Turnstile verification is session-level. After verification, all features are available for the current session. Closing the browser will require re-verification.
 
 <a id="development"></a>
 ## Development

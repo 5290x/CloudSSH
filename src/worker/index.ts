@@ -136,6 +136,7 @@ export default {
     if (url.pathname === '/api/config') {
       return Response.json({
         turnstileEnabled: !!env.TURNSTILE_SECRET,
+        sitekey: env.TURNSTILE_SITEKEY || '',
       });
     }
 

@@ -53,6 +53,7 @@ export interface Env {
   MAX_CONNECTIONS?: string;
   IDLE_TIMEOUT?: string;
   TURNSTILE_SECRET?: string;
+  TURNSTILE_SITEKEY?: string;
 }
 
 export const SSH_MSG_DISCONNECT = 1;

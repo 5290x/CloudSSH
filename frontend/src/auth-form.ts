@@ -46,6 +46,7 @@ export class ConnectionForm {
   private turnstileEnabled = false;
   private turnstileVerified = false;
   private turnstileWidgetId: string | null = null;
+  private turnstileSitekey = '';
 
   constructor(terminal: SSHTerminal) {
     this.terminal = terminal;
@@ -57,9 +58,10 @@ export class ConnectionForm {
   private async checkTurnstileConfig(): Promise<void> {
     try {
       const response = await fetch('/api/config');
-      const config = (await response.json()) as { turnstileEnabled: boolean };
+      const config = (await response.json()) as { turnstileEnabled: boolean; sitekey: string };
       this.turnstileEnabled = config.turnstileEnabled;
-      if (this.turnstileEnabled) {
+      this.turnstileSitekey = config.sitekey;
+      if (this.turnstileEnabled && this.turnstileSitekey) {
         this.renderTurnstile();
       }
     } catch {
@@ -75,7 +77,7 @@ export class ConnectionForm {
     if (wrapper) wrapper.style.display = 'block';
 
     this.turnstileWidgetId = window.turnstile.render(container, {
-      sitekey: '0x4AAAAAAB' + 'placeholder', // User needs to replace with their site key
+      sitekey: this.turnstileSitekey,
       theme: 'dark',
       callback: async (token: string) => {
         // Verify with backend and get cookie

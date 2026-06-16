@@ -142,10 +142,13 @@ flowchart TB
 1. **创建 Turnstile Widget**：登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)，进入 Turnstile 页面创建一个新的 Widget。
 2. **获取密钥**：创建后会获得一个 **Site Key**（公开）和一个 **Secret Key**（保密）。
 3. **配置环境变量**：
-   - **方式一部署**：在 Cloudflare Dashboard 的 Workers 设置中，添加环境变量 `TURNSTILE_SECRET`，值为你的 Secret Key。
-   - **方式二部署**：取消 `wrangler.toml` 中 `TURNSTILE_SECRET` 的注释，填入你的 Secret Key。
-4. **更新前端代码**：在 `frontend/src/auth-form.ts` 中，将 `sitekey` 替换为你的 Site Key。
-5. **重新部署**：运行部署命令使配置生效。
+   - **方式一部署**：在 Cloudflare Dashboard 的 Workers 设置中，添加以下环境变量：
+     - `TURNSTILE_SECRET` = 你的 Secret Key
+     - `TURNSTILE_SITEKEY` = 你的 Site Key
+   - **方式二部署**：取消 `wrangler.toml` 中 `TURNSTILE_SECRET` 和 `TURNSTILE_SITEKEY` 的注释，填入对应密钥。
+4. **重新部署**：运行部署命令使配置生效。
+
+> **说明**：Turnstile 验证为会话级别，用户通过验证后当前会话内所有功能可用，关闭浏览器后需重新验证。
 
 <a id="development"></a>
 ## 开发说明
