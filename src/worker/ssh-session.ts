@@ -258,7 +258,7 @@ export class SSHSession {
     // Transport-level messages handled regardless of state
     if (msgType === SSH_MSG_DISCONNECT) {
       this.sendStatus('服务器断开连接');
-      this.close();
+      this.close(true);
       return;
     }
     if (msgType === SSH_MSG_IGNORE || msgType === SSH_MSG_DEBUG || msgType === SSH_MSG_UNIMPLEMENTED) {
@@ -767,12 +767,12 @@ export class SSHSession {
       case SSH_MSG_CHANNEL_EOF:
       case SSH_MSG_CHANNEL_CLOSE:
         this.sendStatus('会话已结束');
-        this.close();
+        this.close(true);
         break;
 
       case SSH_MSG_DISCONNECT:
         this.sendStatus('服务器断开连接');
-        this.close();
+        this.close(true);
         break;
 
       case SSH_MSG_IGNORE:
@@ -853,12 +853,12 @@ export class SSHSession {
     // } catch {}
   }
 
-  close(): void {
+  close(normal: boolean = false): void {
     if (this.keepaliveInterval) {
       clearInterval(this.keepaliveInterval);
       this.keepaliveInterval = null;
     }
     try { this.socket.close(); } catch {}
-    try { this.ws.close(); } catch {}
+    try { this.ws.close(normal ? 1000 : 1011); } catch {}
   }
 }
