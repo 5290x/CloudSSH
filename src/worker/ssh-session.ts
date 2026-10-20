@@ -111,6 +111,10 @@ export interface SSHSessionOptions {
    * 未传入时从 env.IDLE_TIMEOUT 解析，默认 30 分钟；0 表示禁用。
    */
   idleTimeoutMs?: number;
+  /** Cloudflare PoP 数据中心标识（如 HKG、SJC 等） */
+  colo?: string;
+  /** 周期性测量到远端 SSH 主机 RTT 后的回调，便于 DO 同步更新基线缓存 */
+  onRttUpdated?: (latency: number, colo: string) => void;
 }
 
 export class SSHSession {
@@ -207,6 +211,9 @@ export class SSHSession {
   private readonly maxKeepaliveFails: number = 3;
   private keepalivePending: boolean = false;
   private keepaliveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private keepaliveSentAt: number | null = null;
+  private colo: string = 'UNKNOWN';
+  private readonly onRttUpdated?: (latency: number, colo: string) => void;
   private lastPacketAt: number = Date.now();
   private lastUserActivityAt: number = Date.now();
   private idleWarningEmitted: boolean = false;
@@ -311,6 +318,8 @@ export class SSHSession {
     this.ownsWebSocket = options.ownsWebSocket !== false;
     this.allowKeyboardInteractive = options.allowKeyboardInteractive !== false;
     this.waitUntil = options.waitUntil;
+    this.colo = options.colo || 'UNKNOWN';
+    this.onRttUpdated = options.onRttUpdated;
     this.idleTimeoutMs =
       options.idleTimeoutMs !== undefined
         ? options.idleTimeoutMs
@@ -733,6 +742,11 @@ export class SSHSession {
     }
     if (msgType === SSH_MSG_REQUEST_SUCCESS || msgType === SSH_MSG_REQUEST_FAILURE) {
       // Response to our global request (e.g., keepalive)
+      if (this.keepalivePending && this.keepaliveSentAt !== null) {
+        const latency = Math.round(performance.now() - this.keepaliveSentAt);
+        this.keepaliveSentAt = null;
+        this.emitKeepaliveRtt(latency);
+      }
       this.keepalivePending = false;
       this.keepaliveFailCount = 0;
       if (this.keepaliveTimeout) {
@@ -803,6 +817,18 @@ export class SSHSession {
     }
   }
 
+  private emitKeepaliveRtt(latency: number): void {
+    if (latency < 0) return;
+    this.onRttUpdated?.(latency, this.colo);
+    if (this.ownsWebSocket && !this.isDetached() && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify({ type: 'rtt', latency, colo: this.colo }));
+      } catch {
+        /* 发送失败忽略 */
+      }
+    }
+  }
+
   private startKeepalive(): void {
     this.keepaliveFailCount = 0;
     this.keepalivePending = false;
@@ -825,6 +851,7 @@ export class SSHSession {
         payload.set(KEEPALIVE_REQUEST_NAME, 5);
         payload[5 + KEEPALIVE_REQUEST_NAME.length] = 1; // want_reply = true
 
+        this.keepaliveSentAt = performance.now();
         await this.sendEncrypted(payload);
         this.keepalivePending = true;
 
@@ -836,6 +863,7 @@ export class SSHSession {
               `Keepalive response timeout (${this.keepaliveFailCount}/${this.maxKeepaliveFails})`
             );
             this.keepalivePending = false;
+            this.keepaliveSentAt = null;
             if (this.keepaliveFailCount >= this.maxKeepaliveFails) {
               this.sendError('SSH 连接超时，保活失败', 'keepalive_timeout');
               this.close();
@@ -844,6 +872,8 @@ export class SSHSession {
         }, 10000);
       } catch (e) {
         this.keepaliveFailCount++;
+        this.keepalivePending = false;
+        this.keepaliveSentAt = null;
         this.sendDebug(
           `Keepalive send failed (${this.keepaliveFailCount}/${this.maxKeepaliveFails}): ${e instanceof Error ? e.message : String(e)}`
         );
@@ -1608,6 +1638,8 @@ export class SSHSession {
   }
 
   private canUseAuthMethod(method: ActiveAuthMethod): boolean {
+    // Explicit none mode must never send credentials or start interactive auth.
+    if (this.config.authMethod === 'none') return method === 'none';
     switch (method) {
       case 'none':
         return true;
@@ -1617,7 +1649,7 @@ export class SSHSession {
           Boolean(this.config.privateKey && this.sessionID)
         );
       case 'password':
-        return this.config.authMethod !== 'publickey' && Boolean(this.config.password);
+        return this.config.authMethod !== 'publickey' && typeof this.config.password === 'string';
       case 'keyboard-interactive':
         // 分享会话不能把所有者保存的密码交由接收者决定如何响应远端挑战。
         return this.allowKeyboardInteractive && this.config.sessionPolicy?.source !== 'share';
@@ -1778,6 +1810,15 @@ export class SSHSession {
           this.failAuthentication(
             '服务器发送了无效的认证失败响应',
             'auth_interactive_protocol_error'
+          );
+          break;
+        }
+
+        if (this.config.authMethod === 'none') {
+          this.failAuthentication(
+            '服务器拒绝无认证（none）登录，请选择服务器支持的认证方式',
+            'auth_none_rejected',
+            true
           );
           break;
         }
@@ -3551,6 +3592,9 @@ export class SSHSession {
     // 重发双段延迟基线：上游 SSH 连接未重建，原 CF→源站基线仍有效；
     // 客户端↔CF 段由心跳即时探测补齐
     if (credentials?.baseline) {
+      if (credentials.baseline.colo) {
+        this.colo = credentials.baseline.colo;
+      }
       try {
         this.ws.send(
           JSON.stringify({
@@ -3615,6 +3659,8 @@ export class SSHSession {
       clearTimeout(this.keepaliveTimeout);
       this.keepaliveTimeout = null;
     }
+    this.keepalivePending = false;
+    this.keepaliveSentAt = null;
     if (this.idleWatchdogInterval) {
       clearInterval(this.idleWatchdogInterval);
       this.idleWatchdogInterval = null;
